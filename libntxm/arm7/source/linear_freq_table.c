@@ -1,0 +1,1 @@
+../../arm9/source/linear_freq_table.c
