@@ -45,6 +45,8 @@
 #include "ntxm/command.h"
 #include "ntxm/song.h"
 
+static int fifoChannel;
+
 void (*onUpdateRow)(u16 row) = 0;
 void (*onStop)(void) = 0;
 void (*onPlaySampleFinished)(void) = 0;
@@ -70,65 +72,67 @@ void RegisterPotPosChangeCallback(void (*onPotPosChange_)(u16))
 	onPotPosChange = onPotPosChange_;
 }
 
-void CommandInit() {
-	memset(commandControl, 0, sizeof(CommandControl));
+void CommandInit(int channel)
+{
+	fifoChannel = channel;
+}
+
+static inline void CommandSend(Command* cmd, size_t len)
+{
+	fifoSendDatamsg(fifoChannel, len + 4, (u8*) cmd);
+}
+
+static inline int CommandReceive(void)
+{
+	while (!fifoCheckValue32(fifoChannel))
+		swiIntrWait(1, IRQ_FIFO_NOT_EMPTY);
+	return (int) fifoGetValue32(fifoChannel);
 }
 
 void CommandPlaySample(Sample *sample, u8 note, u8 volume, u8 channel)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	PlaySampleCommand* ps = &command->playSample;
+	Command command;
+	PlaySampleCommand* ps = &command.playSample;
 	
-	command->commandType = PLAY_SAMPLE;
+	command.commandType = PLAY_SAMPLE;
 	
 	ps->sample = sample;
 	ps->note = note;
 	ps->volume = volume;
 	ps->channel = channel;
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(PlaySampleCommand));
 }
 
 void CommandStopSample(int channel)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	StopSampleSoundCommand *ss = &command->stopSample;
+	Command command;
+	StopSampleSoundCommand *ss = &command.stopSample;
 
-	command->commandType = STOP_SAMPLE; 
+	command.commandType = STOP_SAMPLE; 
 	ss->channel = channel;
 
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(StopSampleSoundCommand));
 }
 
 void CommandStartRecording(u16* buffer, int length)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	StartRecordingCommand* sr = &command->startRecording;
+	Command command;
+	StartRecordingCommand* sr = &command.startRecording;
 
-	command->commandType = START_RECORDING; 
+	command.commandType = START_RECORDING; 
 	sr->buffer = buffer;
 	sr->length = length;
 
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(StartRecordingCommand));
 }
 
 int CommandStopRecording(void)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	command->commandType = STOP_RECORDING;
-	commandControl->return_data = -1;
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
-	while(commandControl->return_data == -1)
-		swiDelay(1);
-	return commandControl->return_data;
+	Command command;
+	command.commandType = STOP_RECORDING;
+	CommandSend(&command, 0);
+	return CommandReceive();
 }
 
 void RecvCommandUpdateRow(UpdateRowCommand *c)
@@ -156,143 +160,121 @@ void RecvCommandSampleFinish(void) {
 
 void CommandProcessCommands(void)
 {
-	static int currentCommand = 0;
-	while(currentCommand != commandControl->currentCommand) {
-		Command* command = &commandControl->command[currentCommand];
+	Command command;
+
+	while(fifoCheckDatamsg(fifoChannel)) {
+		fifoGetDatamsg(fifoChannel, sizeof(Command), (u8*) &command);
 		
-		if(command->destination == DST_ARM9) {
-		
-			switch(command->commandType)
-			{
-				case DBG_OUT:
-					iprintf("%s", command->dbgOut.msg);
-					break;
-				
-				case UPDATE_ROW:
-					RecvCommandUpdateRow(&command->updateRow);
-					break;
-				
-				case UPDATE_POTPOS:
-					RecvCommandUpdatePotPos(&command->updatePotPos);
-					break;
-				
-				case NOTIFY_STOP:
-					RecvCommandNotifyStop();
-					break;
-				
-				case SAMPLE_FINISH:
-					RecvCommandSampleFinish();
-					break;
-				
-				default:
-					break;
-			}
-		
-		}
+		switch(command.commandType)
+		{
+			case DBG_OUT:
+				iprintf("%s", command.dbgOut.msg);
+				break;
 			
-		currentCommand++;
-		currentCommand %= MAX_COMMANDS;
+			case UPDATE_ROW:
+				RecvCommandUpdateRow(&command.updateRow);
+				break;
+			
+			case UPDATE_POTPOS:
+				RecvCommandUpdatePotPos(&command.updatePotPos);
+				break;
+			
+			case NOTIFY_STOP:
+				RecvCommandNotifyStop();
+				break;
+			
+			case SAMPLE_FINISH:
+				RecvCommandSampleFinish();
+				break;
+			
+			default:
+				break;
+		}
 	}
 }
 
 void CommandSetSong(void *song)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	SetSongCommand* c = &command->setSong;
+	Command command;
+	SetSongCommand* c = &command.setSong;
 
-	command->commandType = SET_SONG; 
+	command.commandType = SET_SONG; 
 	c->ptr = song;
 
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(SetSongCommand));
 }
 
 void CommandStartPlay(u8 potpos, u16 row, bool loop)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	StartPlayCommand* c = &command->startPlay;
+	Command command;
+	StartPlayCommand* c = &command.startPlay;
 
-	command->commandType = START_PLAY; 
+	command.commandType = START_PLAY; 
 	c->potpos = potpos;
 	c->row = row;
 	c->loop = loop;
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(StartPlayCommand));
 }
 
 void CommandStopPlay(void) {
 	
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	command->commandType = STOP_PLAY; 
+	Command command;
+	command.commandType = STOP_PLAY;
 
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;	
+	CommandSend(&command, 0);
 }
 
 void CommandPlayInst(u8 inst, u8 note, u8 volume, u8 channel)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	command->commandType = PLAY_INST; 
+	Command command;
+	command.commandType = PLAY_INST; 
 	
-	PlayInstCommand* c = &command->playInst;
+	PlayInstCommand* c = &command.playInst;
 
 	c->inst    = inst;
 	c->note    = note;
 	c->volume  = volume;
 	c->channel = channel;
 
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;	
+	CommandSend(&command, sizeof(PlayInstCommand));
 }
 
 void CommandStopInst(u8 channel)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	command->commandType = STOP_INST; 
+	Command command;
+	command.commandType = STOP_INST; 
 	
-	StopInstCommand* c = &command->stopInst;
+	StopInstCommand* c = &command.stopInst;
 	
 	c->channel = channel;
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;	
+	CommandSend(&command, sizeof(StopInstCommand));
 }
 
 void CommandMicOn(void)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	command->commandType = MIC_ON; 
+	Command command;
+	command.commandType = MIC_ON; 
 
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;	
+	CommandSend(&command, 0);
 }
 
 void CommandMicOff(void)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	command->commandType = MIC_OFF;
+	Command command;
+	command.commandType = MIC_OFF;
 
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;	
+	CommandSend(&command, 0);
 }
 
 void CommandSetPatternLoop(bool state)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM7;
-	command->commandType = PATTERN_LOOP;
+	Command command;
+	command.commandType = PATTERN_LOOP;
 	
-	PatternLoopCommand* c = &command->ptnLoop;
+	PatternLoopCommand* c = &command.ptnLoop;
 	c->state = state;
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(PatternLoopCommand));
 }

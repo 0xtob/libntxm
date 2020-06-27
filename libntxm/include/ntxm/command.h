@@ -33,9 +33,6 @@
 #if !defined(COMMAND_H)
 #define COMMAND_H
 
-#define DST_ARM7	0
-#define DST_ARM9	1
-
 #define DEBUGSTRSIZE 40
 
 #include <nds.h>
@@ -133,7 +130,6 @@ struct PatternLoopCommand {
 /* The ARM9 fills out values in this structure to tell the ARM7 what
    to do. */
 struct Command {
-	u8 destination;
 	CommandType commandType;
 	union {
 		void* data;
@@ -150,25 +146,9 @@ struct Command {
 		StopInstCommand        stopInst;
 		PatternLoopCommand     ptnLoop;
 	};
-};
-
-/* Maximum number of commands */
-#define MAX_COMMANDS 40
-
-/* A structure shared between the ARM7 and ARM9. The ARM9
-   places commands here and the ARM7 reads and acts upon them.
-*/
-struct CommandControl {
-	Command command[MAX_COMMANDS];
-	int currentCommand;
-	int return_data;
-};
-
-/* Address of the shared CommandControl structure */
-#define commandControl ((CommandControl*)((uint32)(IPC) + sizeof(TransferRegion)))
+} __attribute__((aligned(4)));
 
 #if defined(ARM9)
-void CommandInit();
 void CommandPlayOneShotSample(int channel, int frequency, const void* data, int length, int volume, int format, bool loop);
 void CommandPlaySample(Sample *sample, u8 note, u8 volume, u8 channel);
 void CommandPlaySample(Sample *sample);
@@ -191,6 +171,7 @@ void RegisterPlaySampleFinishedCallback(void (*onPlaySampleFinished_)(void));
 void RegisterPotPosChangeCallback(void (*onPotPosChange_)(u16));
 #endif
 
+void CommandInit(int fifoChannel);
 void CommandProcessCommands();
 
 #if defined(ARM7)

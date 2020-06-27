@@ -52,6 +52,22 @@ extern "C" {
 
 extern NTXM7 *ntxm7;
 bool ntxm_recording = false;
+static int fifoChannel;
+
+void CommandInit(int channel)
+{
+	fifoChannel = channel;
+}
+
+static inline void CommandSend(Command* cmd, size_t len)
+{
+	fifoSendDatamsg(fifoChannel, len + sizeof(CommandType), (u8*) cmd);
+}
+
+static inline void CommandReturn(int value)
+{
+	fifoSendValue32(fifoChannel, value);
+}
 
 static void RecvCommandPlaySample(PlaySampleCommand *ps)
 {
@@ -76,12 +92,11 @@ static void RecvCommandStartRecording(StartRecordingCommand* sr)
 {
 	ntxm_recording = true;
 	tob_StartRecording(sr->buffer, sr->length);
-	commandControl->return_data = 0;
 }
 
 static void RecvCommandStopRecording()
 {
-	commandControl->return_data = tob_StopRecording();
+	CommandReturn(tob_StopRecording());
 	ntxm_recording = false;
 }
 
@@ -111,11 +126,10 @@ static void RecvCommandPatternLoop(PatternLoopCommand *c) {
 
 void CommandDbgOut(const char *formatstr, ...)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM9;
-	command->commandType = DBG_OUT;
+	Command command;
+	command.commandType = DBG_OUT;
 	
-	DbgOutCommand *cmd = &command->dbgOut;
+	DbgOutCommand *cmd = &command.dbgOut;
 	
 	va_list marker;
 	va_start(marker, formatstr);
@@ -152,107 +166,93 @@ void CommandDbgOut(const char *formatstr, ...)
 	
 	va_end(marker);
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(DbgOutCommand));
 }
 
 void CommandUpdateRow(u16 row)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM9;
-	command->commandType = UPDATE_ROW;
+	Command command;
+	command.commandType = UPDATE_ROW;
 	
-	UpdateRowCommand *c = &command->updateRow;
+	UpdateRowCommand *c = &command.updateRow;
 	c->row = row;
-	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+
+	CommandSend(&command, sizeof(UpdateRowCommand));	
 }
 
 void CommandUpdatePotPos(u16 potpos)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM9;
-	command->commandType = UPDATE_POTPOS;
+	Command command;
+	command.commandType = UPDATE_POTPOS;
 	
-	UpdatePotPosCommand *c = &command->updatePotPos;
+	UpdatePotPosCommand *c = &command.updatePotPos;
 	c->potpos = potpos;
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, sizeof(UpdatePotPosCommand));
 }
 
 void CommandNotifyStop(void)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM9;
-	command->commandType = NOTIFY_STOP;
+	Command command;
+	command.commandType = NOTIFY_STOP;
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, 0);
 }
 
 void CommandSampleFinish(void)
 {
-	Command* command = &commandControl->command[commandControl->currentCommand];
-	command->destination = DST_ARM9;
-	command->commandType = SAMPLE_FINISH;
+	Command command;
+	command.commandType = SAMPLE_FINISH;
 	
-	commandControl->currentCommand++;
-	commandControl->currentCommand %= MAX_COMMANDS;
+	CommandSend(&command, 0);
 }
 
 void CommandProcessCommands(void)
 {
-	static int currentCommand = 0;
-	while(currentCommand != commandControl->currentCommand) {
-		Command* command = &commandControl->command[currentCommand];
-		
-		if(command->destination == DST_ARM7) {
-		
-			switch(command->commandType) {
-				case PLAY_SAMPLE:
-					RecvCommandPlaySample(&command->playSample);
-					break;
-				case STOP_SAMPLE:
-					RecvCommandStopSample(&command->stopSample);
-					break;
-				case START_RECORDING:
-					RecvCommandStartRecording(&command->startRecording);
-					break;
-				case STOP_RECORDING:
-					RecvCommandStopRecording();
-					break;
-				case SET_SONG:
-					RecvCommandSetSong(&command->setSong);
-					break;
-				case START_PLAY:
-					RecvCommandStartPlay(&command->startPlay);
-					break;
-				case STOP_PLAY:
-					RecvCommandStopPlay(&command->stopPlay);
-					break;
-				case PLAY_INST:
-					RecvCommandPlayInst(&command->playInst);
-					break;
-				case STOP_INST:
-					RecvCommandStopInst(&command->stopInst);
-					break;
-				case MIC_ON:
-					RecvCommandMicOn();
-					break;
-				case MIC_OFF:
-					RecvCommandMicOff();
-					break;
-				case PATTERN_LOOP:
-					RecvCommandPatternLoop(&command->ptnLoop);
-					break;
-				default:
-					break;
-			}
-		
+	Command command;
+
+	while(fifoCheckDatamsg(fifoChannel)) {
+		fifoGetDatamsg(fifoChannel, sizeof(Command), (u8*) &command);
+
+		switch(command.commandType) {
+			case PLAY_SAMPLE:
+				RecvCommandPlaySample(&command.playSample);
+				break;
+			case STOP_SAMPLE:
+				RecvCommandStopSample(&command.stopSample);
+				break;
+			case START_RECORDING:
+				RecvCommandStartRecording(&command.startRecording);
+				break;
+			case STOP_RECORDING:
+				RecvCommandStopRecording();
+				break;
+			case SET_SONG:
+				RecvCommandSetSong(&command.setSong);
+				break;
+			case START_PLAY:
+				RecvCommandStartPlay(&command.startPlay);
+				break;
+			case STOP_PLAY:
+				RecvCommandStopPlay(&command.stopPlay);
+				break;
+			case PLAY_INST:
+				RecvCommandPlayInst(&command.playInst);
+				break;
+			case STOP_INST:
+				RecvCommandStopInst(&command.stopInst);
+				break;
+			case MIC_ON:
+				RecvCommandMicOn();
+				break;
+			case MIC_OFF:
+				RecvCommandMicOff();
+				break;
+			case PATTERN_LOOP:
+				RecvCommandPatternLoop(&command.ptnLoop);
+				break;
+			default:
+				break;
 		}
-		currentCommand++;
-		currentCommand %= MAX_COMMANDS;
 	}
 }

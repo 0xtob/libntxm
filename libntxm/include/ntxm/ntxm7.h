@@ -38,7 +38,7 @@
 class NTXM7
 {
 	public:
-		NTXM7(void (*_playTimerHandler)(void));
+		NTXM7(int fifoChannel, void (*_playTimerHandler)(void));
 		~NTXM7(void);
 		
 		// override new and delete to avoid linking cruft. (by WinterMute)

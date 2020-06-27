@@ -16,8 +16,6 @@ export TOPDIR		:=	$(CURDIR)
 #---------------------------------------------------------------------------------
 export PATH		:=	$(DEVKITARM)/bin:$(PATH)
 
-.PHONY: $(TARGET).arm7 $(TARGET).arm9
-
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
@@ -29,12 +27,8 @@ $(TARGET).gba.nds: $(TARGET).nds
 	cat ndsloader.bin $(TARGET).nds > $(TARGET).gba.nds
 
 #---------------------------------------------------------------------------------
-$(TARGET).nds	:	$(TARGET).arm7 $(TARGET).arm9
-	ndstool -c $(TARGET).nds -7 $(TARGET).arm7 -9 $(TARGET).arm9
-
-#---------------------------------------------------------------------------------
-$(TARGET).arm7	: arm7/$(TARGET).elf
-$(TARGET).arm9	: arm9/$(TARGET).elf
+$(TARGET).nds	:	arm7/$(TARGET).elf arm9/$(TARGET).elf
+	ndstool -c $(TARGET).nds -7 arm7/$(TARGET).arm7.elf -9 arm9/$(TARGET).arm9.elf
 
 #---------------------------------------------------------------------------------
 arm7/$(TARGET).elf:
@@ -48,4 +42,4 @@ arm9/$(TARGET).elf:
 clean:
 	$(MAKE) -C arm9 clean
 	$(MAKE) -C arm7 clean
-	rm -f $(TARGET).ds.gba $(TARGET).nds $(TARGET).arm7 $(TARGET).arm9
+	rm -f $(TARGET).ds.gba $(TARGET).nds

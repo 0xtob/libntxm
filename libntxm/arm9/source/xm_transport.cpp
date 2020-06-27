@@ -568,7 +568,7 @@ u16 XMTransport::load(const char *filename, Song **_song)
 				}
 				
 				// Delta-decode
-				iprintf("delta deocde\n");
+				iprintf("delta decode\n");
 				if(sample_is_16_bit) {
 					s16 last = 0;
 					s16 *smp = (s16*)sample_data;

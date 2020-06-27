@@ -48,10 +48,11 @@ void NTXM7::operator delete (void *p) {
  
 } // default dtor implicitly called here
 
-NTXM7::NTXM7(void (*_playTimerHandler)(void))
+NTXM7::NTXM7(int fifoChannel, void (*_playTimerHandler)(void))
 	:player(0)
 {
 	player = new Player(_playTimerHandler);
+	CommandInit(fifoChannel);
 }
 
 NTXM7::~NTXM7(void)

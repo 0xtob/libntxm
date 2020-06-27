@@ -7,6 +7,10 @@ endif
 
 include $(DEVKITARM)/ds_rules
 
+ifeq ($(strip $(LIBNTXM)),)
+$(error "Please set LIBNTXM in your environment. export LIBNTXM=<path to>libntxm)
+endif
+
 #---------------------------------------------------------------------------------
 # BUILD is the directory where object files & intermediate files will be placed
 # SOURCES is a list of directories containing source code
@@ -34,7 +38,7 @@ CXXFLAGS	:=	$(CFLAGS) -fno-rtti -fno-exceptions
 
 ASFLAGS	:=	-g $(ARCH) -march=armv5te -mtune=arm946e-s
 
-LDFLAGS	=	-specs=ds_arm9.specs -g $(ARCH) -mno-fpu -Wl,-Map,$(notdir $*.map)
+LDFLAGS	=	-specs=ds_arm9.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
@@ -45,7 +49,7 @@ LIBS	:= -lntxm9 -lfat -lnds9
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:=	$(LIBNDS)
+LIBDIRS	:=	$(LIBNTXM) $(LIBNDS)
  
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -54,7 +58,6 @@ LIBDIRS	:=	$(LIBNDS)
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 #---------------------------------------------------------------------------------
  
-export ARM9BIN	:=	$(TOPDIR)/$(TARGET).arm9
 export ARM9ELF	:=	$(CURDIR)/$(TARGET).arm9.elf
 export DEPSDIR := $(CURDIR)/$(BUILD)
 
@@ -110,10 +113,6 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
-$(ARM9BIN)	:	$(ARM9ELF)
-	@$(OBJCOPY) -O binary $< $@
-	@echo built ... $(notdir $@)
-
 $(ARM9ELF)	:	$(OFILES)
 	@echo linking $(notdir $@)
 	@$(LD)  $(LDFLAGS) $(OFILES) $(LIBPATHS) $(LIBS) -o $@

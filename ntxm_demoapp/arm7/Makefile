@@ -7,6 +7,10 @@ endif
 
 include $(DEVKITARM)/ds_rules
 
+ifeq ($(strip $(LIBNTXM)),)
+$(error "Please set LIBNTXM in your environment. export LIBNTXM=<path to>libntxm)
+endif
+
 #---------------------------------------------------------------------------------
 # BUILD is the directory where object files & intermediate files will be placed
 # SOURCES is a list of directories containing source code
@@ -34,7 +38,7 @@ CXXFLAGS	:=	$(CFLAGS) -fno-rtti -fno-exceptions -fno-rtti
 
 
 ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=ds_arm7.specs -g $(ARCH) -Wl,-Map,$(notdir $*).map
+LDFLAGS	=	-specs=ds_arm7.specs -g $(ARCH) -Wl,--nmagic -Wl,-Map,$(notdir $*).map
 
 LIBS	:=	-lntxm7 -lnds7
 
@@ -42,7 +46,7 @@ LIBS	:=	-lntxm7 -lnds7
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:=	$(LIBNDS)
+LIBDIRS	:=	$(LIBNTXM) $(LIBNDS)
  
   
 #---------------------------------------------------------------------------------
@@ -52,7 +56,6 @@ LIBDIRS	:=	$(LIBNDS)
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 #---------------------------------------------------------------------------------
  
-export ARM7BIN	:=	$(TOPDIR)/$(TARGET).arm7
 export ARM7ELF	:=	$(CURDIR)/$(TARGET).arm7.elf
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
@@ -107,11 +110,6 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
-$(ARM7BIN)	:	$(ARM7ELF)
-	@$(OBJCOPY) -O binary $< $@
-	@echo built ... $(notdir $@)
-
-
 $(ARM7ELF)	:	$(OFILES)
 	@echo linking $(notdir $@)
 	@$(LD)  $(LDFLAGS) $(OFILES) $(LIBPATHS) $(LIBS) -o $@

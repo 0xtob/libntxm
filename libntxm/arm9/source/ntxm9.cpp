@@ -34,11 +34,11 @@
 #include "ntxm/demokit.h"
 #include "ntxm/command.h"
 
-NTXM9::NTXM9()
+NTXM9::NTXM9(int fifoChannel)
 	:xm_transport(0), song(0)
 {
 	xm_transport = new XMTransport();
-	CommandInit();
+	CommandInit(fifoChannel);
 }
 
 NTXM9::~NTXM9()
@@ -49,7 +49,7 @@ NTXM9::~NTXM9()
 		delete song;
 }
 
-u16 NTXM9::load(char *filename)
+u16 NTXM9::load(const char *filename)
 {
 	u16 err = xm_transport->load(filename, &song);
 	CommandSetSong(song);
@@ -59,6 +59,11 @@ u16 NTXM9::load(char *filename)
 const char *NTXM9::getError(u16 error_id)
 {
 	return xm_transport->getError(error_id);
+}
+
+void NTXM9::updateCommands(void)
+{
+	CommandProcessCommands();
 }
 
 void NTXM9::play(bool repeat)

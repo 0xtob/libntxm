@@ -231,7 +231,7 @@ void Player::playTimerHandler(void)
 	
 	u32 passed_time = getTicks() - lastms;
 	lastms = getTicks();
-	
+
 	// Fading stuff
 	handleFade(passed_time);
 	
