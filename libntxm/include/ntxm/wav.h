@@ -65,6 +65,13 @@ class Wav {
 		u8 getBitPerSample(void)  { return bit_per_sample_; }
 		u8 getCompression(void)   { return compression_; }
 
+		void setCompression(u8 compression)     { compression_ = compression; }
+		void setNChannels(u8 n_channels)        { n_channels_ = n_channels; }
+		void setSamplingRate(u16 sampling_rate) { sampling_rate_ = sampling_rate; }
+		void setBitPerSample(u8 bit_per_sample) { bit_per_sample_ = bit_per_sample; }
+		void setNSamples(u32 n_samples)         { n_samples_ = n_samples; }
+		void setAudioData(u8 *audio_data)       { audio_data_ = audio_data; }
+		
 	private:
 		u8 compression_;
 		u8 n_channels_;

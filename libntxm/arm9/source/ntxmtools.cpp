@@ -36,6 +36,7 @@
 #include <nds.h>
 
 #include "ntxm/ntxmtools.h"
+#include <sys/statvfs.h>
 
 s32 unfreed_malloc_calls = 0;
 
@@ -81,7 +82,7 @@ void my_end_malloc_invariant(void)
 void *my_memalign(size_t blocksize, size_t bytes)
 {
 	void *buf = memalign(blocksize, bytes);
-	if((u32)buf & blocksize != 0) {
+	if( ((u32)buf & blocksize) != 0) {
 		iprintf("Memalign error! %p ist not %u-aligned\n", buf, (u16)blocksize);
 		return 0;
 	} else {
@@ -117,57 +118,6 @@ char *my_strncpy(char *dest, const char *src, u32 n)
 
 #ifdef ARM9
 
-u32 my_fwrite_buffered(const void* buffer, u32 size, u32 count, FILE* file)
-{
-	u32 buffer_rest = WRITEBUFFER_SIZE - writebuffer_pos;
-	u32 bytes = size * count;
-	
-	if(bytes < buffer_rest) {
-		
-		memcpy(writebuffer+writebuffer_pos, buffer, bytes);
-		writebuffer_pos += bytes;
-		
-	} else {
-		
-		memcpy(writebuffer+writebuffer_pos, buffer, buffer_rest);
-		buffer = (u8*)buffer + buffer_rest;
-		
-		// Flush
-		fwrite(writebuffer, WRITEBUFFER_SIZE, 1, file);
-		writebuffer_pos = 0;
-		
-		bytes -= buffer_rest;
-		buffer_rest = WRITEBUFFER_SIZE;
-		
-		while(bytes >= WRITEBUFFER_SIZE) {
-			
-			memcpy(writebuffer, buffer, WRITEBUFFER_SIZE);
-			buffer = (u8*)buffer + WRITEBUFFER_SIZE;
-			bytes -= WRITEBUFFER_SIZE;
-			
-			// Flush
-			fwrite(writebuffer, WRITEBUFFER_SIZE, 1, file);
-			writebuffer_pos = 0;
-			
-		}
-		
-		memcpy(writebuffer, buffer, bytes);
-		writebuffer_pos += bytes;
-		
-	}
-	
-	return size*count;
-}
-
-
-bool my_fclose_buffered(FILE* file)
-{
-	fwrite(writebuffer, writebuffer_pos, 1, file);
-	writebuffer_pos = 0;
-	
-	return fclose(file);
-}
-
 bool my_file_exists(const char *filename)
 {
 	bool res;
@@ -183,15 +133,6 @@ bool my_file_exists(const char *filename)
 }
 
 #endif
-
-s32 my_clamp(s32 val, s32 min, s32 max)
-{
-	if(val < min)
-		return min;
-	if(val > max)
-		return max;
-	return val;
-}
 
 // Borrowed from Infantile Paralyser
 bool my_testmalloc(int size)
@@ -225,6 +166,7 @@ bool my_testmalloc(int size)
 
 #define PrintFreeMem_Seg (10240)
 
+// Get the size of the biggest allocatable memory chunk
 // Borrowed from Infantile Paralyser
 //TODO: This is NOT a clean way to get the free memory! Fix it!
 u32 my_get_free_mem(void)
@@ -232,10 +174,38 @@ u32 my_get_free_mem(void)
 	s32 i;
 	u32 FreeMemSize=0;
 	
-	for(i=1*PrintFreeMem_Seg;i<4096*1024;i+=PrintFreeMem_Seg){
+	for(i=1*PrintFreeMem_Seg;i<16384*1024;i+=PrintFreeMem_Seg){
 		if(my_testmalloc(i)==false) break;
 		FreeMemSize=i;
 	}
 	
 	return FreeMemSize;
+}
+
+u32 my_getUsedRam(void)
+{
+	struct mallinfo info = mallinfo();
+
+	return info.usmblks + info.uordblks; 
+}
+
+u32 my_getFreeDiskSpace(void)
+{
+	struct statvfs fiData;
+
+	if((statvfs("/",&fiData)) < 0 ) {
+		iprintf("stat failed!\n");
+		return 0;
+	} else {
+		return fiData.f_bsize*fiData.f_bfree;
+	}
+}
+
+u32 my_getFileSize(const char *filename)
+{
+	FILE *file = fopen(filename, "r");
+	fseek(file, 0, SEEK_END);
+	u32 filesize = ftell(file);
+	fclose(file);
+	return filesize;
 }

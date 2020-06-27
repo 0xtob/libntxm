@@ -7,10 +7,10 @@
  */
 
 /***** BEGIN LICENSE BLOCK *****
- * 
+ *
  * Version: Noncommercial zLib License / GPL 3.0
- * 
- * The contents of this file are subject to the Noncommercial zLib License 
+ *
+ * The contents of this file are subject to the Noncommercial zLib License
  * (the "License"); you may not use this file except in compliance with
  * the License. You should have recieved a copy of the license with this package.
  *
@@ -27,7 +27,7 @@
  * provisions required by the GPL. If you do not delete the provisions above,
  * a recipient may use your version of this file under the terms of any one of
  * the GPL or the Noncommercial zLib License.
- * 
+ *
  ***** END LICENSE BLOCK *****/
 
 #include <stdlib.h>
@@ -36,7 +36,7 @@ extern "C" {
   #include "ntxm/demokit.h"
 }
 #include "ntxm/ntxmtools.h"
-#include "ntxm/command.h"
+#include "ntxm/fifocommand.h"
 #include "ntxm/song.h"
 #include "ntxm/player.h"
 
@@ -49,33 +49,34 @@ extern bool ntxm_recording;
 /* ===================== PUBLIC ===================== */
 
 Player::Player(void (*_externalTimerHandler)(void))
-	:externalTimerHandler(_externalTimerHandler)
+	:song(0), externalTimerHandler(_externalTimerHandler)
 {
 	initState();
+
 	initEffState();
-	
+
 	demoInit();
-	
+
 	startPlayTimer();
 }
 
 void* Player::operator new (size_t size) {
- 
+
 	return malloc(size);
- 
+
 } // default ctor implicitly called here
- 
+
 void Player::operator delete (void *p) {
- 
+
 	if ( NULL != p ) free(p);
- 
+
 } // default dtor implicitly called here
 
 void Player::setSong(Song *_song)
 {
 	song = _song;
 	initState();
-	
+
 	// Init fading
 	my_memset(state.channel_fade_active, 0, sizeof(state.channel_fade_active));
 	my_memset(state.channel_fade_ms, 0, sizeof(state.channel_fade_ms));
@@ -97,29 +98,29 @@ void Player::play(u8 potpos, u16 row, bool loop)
 		my_memset(state.channel_ms_left, 0, sizeof(state.channel_ms_left));
 		my_memset(state.channel_loop, 0, sizeof(state.channel_loop));
 	}
-	
+
 	state.potpos = potpos;
 	state.row = row;
 	state.pattern = song->pattern_order_table[state.potpos];
 	state.songloop = loop;
-	
+
 	// Reset ms and tick counter
 	state.tick_ms = 0;
 	state.row_ticks = 0;
-	
+
 	state.juststarted = true;
-	
+
 	lastms = getTicks();
 
 	initEffState();
-	
+
 	state.playing = true;
 }
 
 void Player::stop(void)
 {
 	state.playing = false;
-	
+
 	// Stop all playing samples
 	u8 end;
 	if(song->n_channels < MAX_CHANNELS) {
@@ -127,7 +128,7 @@ void Player::stop(void)
 	} else {
 		end = MAX_CHANNELS;
 	}
-	
+
 	for(u8 chn = 0; chn < end; chn++)
 	{
 		state.channel_fade_active[chn] = 1;
@@ -141,13 +142,18 @@ void Player::playNote(u8 note, u8 volume, u8 channel, u8 instidx)
 {
 	if( (state.playing == true) && (song->channelMuted(channel) == true) )
 		return;
-	
+
+	Instrument *inst = song->instruments[instidx];
+
+	if(inst == 0)
+		return;
+
 	if(channel == 255) // Find a free channel
 	{
 		s8 c = MAX_CHANNELS-1;
 		while( ( state.channel_active[c] == 1) && ( c >= 0 ) )
 			--c;
-		
+
 		if( c < 0 )
 			return;
 		else
@@ -156,29 +162,34 @@ void Player::playNote(u8 note, u8 volume, u8 channel, u8 instidx)
 			state.last_autochannel = c;
 		}
 	}
-	
+
 	// Stop possibly active fades
 	state.channel_fade_active[channel] = 0;
 	state.channel_fade_ms[channel] = 0;
 	state.channel_instrument[channel] = instidx;
-	
-	Instrument *inst = song->instruments[instidx];
-	
+
+
+
 	if(volume == NO_VOLUME) {
 		state.channel_volume[channel] = MAX_VOLUME * inst->getSampleForNote(note)->getVolume() / 255;
 	} else {
 		state.channel_volume[channel] = volume * inst->getSampleForNote(note)->getVolume() / 255;
 	}
-	
+
+	if(inst->getSampleForNote(note)->getLoop() != 0) {
+		state.channel_loop[channel] = true;
+		state.channel_ms_left[channel] = 0;
+	} else {
+		state.channel_loop[channel] = false;
+		state.channel_ms_left[channel] = inst->calcPlayLength(note);
+	}
+
 	state.channel_fade_vol[channel] = state.channel_volume[channel];
-	
+
 	state.channel_note[channel]   = note;
 	state.channel_active[channel] = 1;
-	
-	if(inst != 0)
-	{
-		inst->play(note, volume, channel);
-	}
+
+	inst->play(note, volume, channel);
 }
 
 // Play the given sample (and send a notification when done)
@@ -190,15 +201,15 @@ void Player::playSample(Sample *sample, u8 note, u8 volume, u8 channel)
 		state.single_sample_ms_remaining = 0;
 		CommandSampleFinish();
 	}
-	
+
 	// Calculate length
 	u32 length = sample->calcPlayLength(note);
-	
+
 	// Set sample playing state
 	state.playing_single_sample = true;
 	state.single_sample_ms_remaining = length;
 	state.single_sample_channel = 0;
-	
+
 	// Play
 	sample->play(note, volume, channel);
 }
@@ -210,11 +221,11 @@ void Player::stopChannel(u8 channel)
 	{
 		channel = state.last_autochannel;
 	}
-	
+
 	state.channel_fade_active[channel]        = 1;
 	state.channel_fade_ms[channel]            = FADE_OUT_MS;
 	state.channel_fade_target_volume[channel] = 0;
-	
+
 	// Stop single sample if it's played on this channel
 	if((state.playing_single_sample == true) && (state.single_sample_channel == channel))
 	{
@@ -228,13 +239,13 @@ void Player::playTimerHandler(void)
 {
 	if(ntxm_recording && !state.playing)
 		return;
-	
+
 	u32 passed_time = getTicks() - lastms;
 	lastms = getTicks();
-	
+
 	// Fading stuff
 	handleFade(passed_time);
-	
+
 	// Are we playing a single sample (a sample not from the song)?
 	// (Built in for games etc)
 	if(state.playing_single_sample)
@@ -245,7 +256,7 @@ void Player::playTimerHandler(void)
 			state.playing_single_sample = false;
 			state.single_sample_ms_remaining = 0;
 			state.single_sample_channel = 0;
-			
+
 			CommandSampleFinish();
 		}
 		else
@@ -253,12 +264,16 @@ void Player::playTimerHandler(void)
 			state.single_sample_ms_remaining -= passed_time;
 		}
 	}
-	
+
+	if(song == 0) {
+		return;
+	}
+
 	// Update tick ms
-	state.tick_ms += passed_time;
-	
+	state.tick_ms += passed_time << 16;
+
 	// Check if we are shortly before the next tick. (As long as a fade would take)
-	if(state.tick_ms >= song->getMsPerTick() - FADE_OUT_MS)
+	if(state.tick_ms >= song->getMsPerTick() - (FADE_OUT_MS << 16))
 	{
 		// Is there a request to set the volume?
 		for(u8 channel=0; channel<song->n_channels && channel<MAX_CHANNELS; ++channel)
@@ -270,7 +285,7 @@ void Player::playTimerHandler(void)
 				effstate.channel_setvol_requested[channel] = false;
 			}
 		}
-		
+
 		// Is this the last tick before the next row?
 		if(state.row_ticks >= song->getTempo()-1)
 		{
@@ -282,10 +297,10 @@ void Player::playTimerHandler(void)
 				{
 					u16 nextrow;
 					u8 nextpattern, nextpotpos;
-					
+
 					calcNextPos(&nextrow, &nextpotpos);
 					nextpattern = song->pattern_order_table[nextpotpos];
-					
+
 					nextNote = song->patterns[nextpattern][channel][nextrow].note;
 					if((nextNote!=EMPTY_NOTE) && (state.channel_fade_active[channel] == 0))
 					{
@@ -298,7 +313,7 @@ void Player::playTimerHandler(void)
 			}
 		}
 	}
-	
+
 	// Update active channels
 	for(u8 channel=0; channel<song->n_channels && channel<MAX_CHANNELS; ++channel)
 	{
@@ -315,7 +330,7 @@ void Player::playTimerHandler(void)
 			}
 		}
 	}
-	
+
 	// Update envelopes
 	for(u8 channel=0; channel<MAX_CHANNELS; ++channel)
 	{
@@ -326,7 +341,7 @@ void Player::playTimerHandler(void)
 			state.channel_env_vol[channel] = inst->getEnvelopeAmp(channel);
 		}
 	}
-	
+
 	// Update channel volumes
 	for(u8 channel=0; channel<MAX_CHANNELS; ++channel)
 	{
@@ -335,40 +350,43 @@ void Player::playTimerHandler(void)
 			// The master formula!
 			// FIXME: Use inst volume too!
 			u8 chnvol = state.channel_env_vol[channel] * state.channel_fade_vol[channel] / 64;
-			
+
 			SCHANNEL_VOL(channel) = SOUND_VOL(chnvol);
-			
+
 			if(state.channel_active[channel] == CHANNEL_TO_BE_DISABLED)
+			{
 				state.channel_active[channel] = 0;
+				SCHANNEL_CR(channel) = 0;
+			}
 		}
 	}
-	
+
 	if(state.playing == false)
 		return;
-		
+
 	if( state.juststarted == true ) // Play current row
 	{
 		state.juststarted = false;
-		
+
 		playRow();
-		
+
 		handleEffects();
-		
+
 		handleTickEffects();
-		
+
 		CommandUpdateRow(state.row);
 	}
-	
+
 	// if the number of ms per tick is reached, go to the next tick
 	if(state.tick_ms >= song->getMsPerTick())
 	{
 		// Go to the next tick
 		state.row_ticks++;
-		
+
 		if(state.row_ticks >= song->getTempo())
 		{
 			state.row_ticks = 0;
-			
+
 			bool finished = calcNextPos(&state.row, &state.potpos);
 			if(finished == true)
 			{
@@ -378,32 +396,32 @@ void Player::playTimerHandler(void)
 			{
 				state.pattern = song->pattern_order_table[state.potpos];
 			}
-			
+
 			if(state.waitrow == true) {
 				stop();
 				CommandNotifyStop();
 				state.waitrow = false;
 				return;
 			}
-			
+
 			if(effstate.pattern_break_requested == true)
 				CommandUpdatePotPos(state.potpos);
-			
+
 			finishEffects();
-			
+
 			playRow();
-			
+
 			handleEffects();
-			
+
 			CommandUpdateRow(state.row);
-			
+
 			if(state.row == 0) {
 				CommandUpdatePotPos(state.potpos);
 			}
 		}
-		
+
 		handleTickEffects();
-		
+
 		state.tick_ms -= song->getMsPerTick();
 	}
 }
@@ -424,11 +442,11 @@ void Player::playRow(void)
 		u8 note   = song->patterns[state.pattern][channel][state.row].note;
 		u8 volume = song->patterns[state.pattern][channel][state.row].volume;
 		u8 inst   = song->patterns[state.pattern][channel][state.row].instrument;
-	
+
 		if((note!=EMPTY_NOTE)&&(note!=STOP_NOTE)&&(song->instruments[inst]!=0))
 		{
 			playNote(note, volume, channel, inst);
-			
+
 			state.channel_active[channel] = 1;
 			if(song->instruments[inst]->getSampleForNote(note)->getLoop() != 0) {
 				state.channel_loop[channel] = true;
@@ -445,12 +463,12 @@ void Player::handleEffects(void)
 {
 	effstate.pattern_loop_jump_now = false;
 	effstate.pattern_break_requested = false;
-	
+
 	for(u8 channel=0; channel < song->n_channels && channel<MAX_CHANNELS; ++channel)
 	{
 		u8 effect = song->patterns[state.pattern][channel][state.row].effect;
 		u8 param  = song->patterns[state.pattern][channel][state.row].effect_param;
-		
+
 		if(effect != NO_EFFECT)
 		{
 			switch(effect)
@@ -459,7 +477,7 @@ void Player::handleEffects(void)
 				{
 					u8 e_effect_type  = (param >> 4);
 					u8 e_effect_param = (param & 0x0F);
-					
+
 					switch(e_effect_type)
 					{
 						case(EFFECT_E_SET_LOOP):
@@ -482,7 +500,7 @@ void Player::handleEffects(void)
 								} else {
 									effstate.pattern_loop_count = e_effect_param;
 								}
-								
+
 								if(effstate.pattern_loop_count > 0)
 								{
 									effstate.pattern_loop_jump_now = true;
@@ -491,21 +509,21 @@ void Player::handleEffects(void)
 							break;
 						}
 					}
-					
+
 					break;
 				}
-				
+
 				case EFFECT_SET_VOLUME:
 				{
 					u8 target_volume = MIN(MAX_VOLUME, param * 2);
-					
+
 					// Request volume chnge and set target volume
 					effstate.channel_setvol_requested[channel] = true;
 					state.channel_fade_target_volume[channel] = target_volume;
-					
+
 					break;
 				}
-				
+
 				case EFFECT_PATTERN_BREAK:
 				{
 					// The row at which the next pattern is continued
@@ -513,22 +531,22 @@ void Player::handleEffects(void)
 					u8 b1, b2, newrow;
 					b1 = param >> 4;
 					b2 = param & 0x0F;
-					
+
 					newrow = b1 * 10 + b2;
-					
+
 					effstate.pattern_break_requested = true;
 					effstate.pattern_break_row = newrow;
-					
+
 					break;
 				}
-				
+
 				case EFFECT_SET_SPEED_TEMPO:
 				{
 					if(param < 0x20)
 						song->setTempo(param);
 					else
 						song->setBpm(param);
-					
+
 					break;
 				}
 			}
@@ -544,12 +562,12 @@ void Player::handleTickEffects(void)
 		u8 param   = song->patterns[state.pattern][channel][state.row].effect_param;
 		u8 instidx = state.channel_instrument[channel];
 		Instrument *inst = song->instruments[instidx];
-		
+
 		if(effect != NO_EFFECT)
 		{
 			state.channel_effect[channel] = effect;
 			state.channel_effect_param[channel] = param;
-			
+
 			switch(effect)
 			{
 				case(EFFECT_ARPEGGIO):
@@ -557,10 +575,10 @@ void Player::handleTickEffects(void)
 					u8 halftone1, halftone2;
 					halftone2 = (param & 0xF0) >> 4;
 					halftone1 = param & 0x0F;
-					
+
 					if (inst == 0)
 						continue;
-					
+
 					switch(state.row_ticks % 3)
 					{
 						case(0):
@@ -576,15 +594,15 @@ void Player::handleTickEffects(void)
 									state.channel_note[channel], 0, channel);
 							break;
 					}
-					
+
 					break;
 				}
-				
+
 				case(EFFECT_E): // If the effect is E, the effect type is specified in the 1st param nibble
 				{
 					u8 e_effect_type  = (param >> 4);
 					u8 e_effect_param = (param & 0x0F);
-					
+
 					switch(e_effect_type)
 					{
 						case(EFFECT_E_NOTE_CUT):
@@ -599,35 +617,35 @@ void Player::handleTickEffects(void)
 					}
 					break;
 				}
-				
+
 				case(EFFECT_VOLUME_SLIDE):
 				{
 					if(state.row_ticks == 0) //
 						break;
-					
+
 					s8 slidespeed;
-					
+
 					if(param == 0)
 						slidespeed = effstate.channel_last_slidespeed[channel];
 					else if( (param & 0x0F) == 0 )
 						slidespeed = (param >> 4) * 2;
 					else
 						slidespeed = -(param & 0x0F) * 2;
-					
+
 					effstate.channel_last_slidespeed[channel] = slidespeed;
-					
+
 					s16 targetvolume = state.channel_volume[channel] + slidespeed;
 					if(targetvolume > MAX_VOLUME)
 						targetvolume = MAX_VOLUME;
 					else if(targetvolume < 0)
 						targetvolume = 0;
-					
+
 					effstate.channel_setvol_requested[channel] = true;
 					state.channel_fade_target_volume[channel] = targetvolume;
-					
+
 					break;
 				}
-				
+
 			}
 		}
 	}
@@ -641,7 +659,7 @@ void Player::finishEffects(void)
 		u8 new_effect = song->patterns[state.pattern][channel][state.row].effect;
 		u8 instidx = state.channel_instrument[channel];
 		Instrument *inst = song->instruments[instidx];
-		
+
 		if( (effect != NO_EFFECT) && (new_effect != effect) )
 		{
 			switch(effect)
@@ -650,11 +668,11 @@ void Player::finishEffects(void)
 				{
 					if (inst == 0)
 						continue;
-					
+
 					// Reset note
 					inst->bendNote(state.channel_note[channel] + 0,
 									state.channel_note[channel], 0, channel);
-					
+
 					break;
 				}
 			}
@@ -711,29 +729,29 @@ void Player::handleFade(u32 passed_time)
 				state.channel_fade_ms[channel] -= passed_time;
 			else
 				state.channel_fade_ms[channel] = 0;
-			
+
 			// Calculate volume from initial volume, target volume and remaining fade time
-			// Can be done way quicker using bresenham
+			// Can be done way quicker using fixed point
 			float fslope = (float)(state.channel_volume[channel] - state.channel_fade_target_volume[channel])
 					/ (float)FADE_OUT_MS;
-			
+
 			float fvolume = (float)state.channel_fade_target_volume[channel]
 					+ fslope * (float)(state.channel_fade_ms[channel]);
-			
+
 			u8 volume = (u8)fvolume;
-			
+
 			state.channel_fade_vol[channel] = volume;
-			
+
 			// If we reached 0 ms, disable the fader (and the channel)
 			if(state.channel_fade_ms[channel] == 0)
 			{
 				state.channel_fade_active[channel] = 0;
-				
+
 				state.channel_volume[channel] = state.channel_fade_target_volume[channel];
-				
+
 				// Set channel volume to target volume just to be sure
 				state.channel_fade_vol[channel] = state.channel_fade_target_volume[channel];
-								
+
 				if(state.channel_volume[channel] == 0)
 					state.channel_active[channel] = CHANNEL_TO_BE_DISABLED;
 			}
@@ -747,22 +765,22 @@ bool Player::calcNextPos(u16 *nextrow, u8 *nextpotpos) // Calculate next row and
 	{
 		*nextrow = effstate.pattern_loop_begin;
 		*nextpotpos = state.potpos;
-		
+
 		return false;
 	}
-	
+
 	if(effstate.pattern_break_requested == true)
 	{
 		*nextrow = effstate.pattern_break_row;
-		
+
 		if(state.potpos < song->getPotLength() - 1)
 				*nextpotpos = state.potpos + 1;
 			else
 				*nextpotpos = song->getRestartPosition();
-		
+
 		return false;
 	}
-	
+
 	if(state.row + 1 >= song->patternlengths[state.pattern])
 	{
 		if(state.patternloop == false) // Don't jump when looping is enabled
@@ -783,6 +801,6 @@ bool Player::calcNextPos(u16 *nextrow, u8 *nextpotpos) // Calculate next row and
 		*nextrow = state.row + 1;
 		*nextpotpos = state.potpos;
 	}
-	
+
 	return false;
 }

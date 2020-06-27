@@ -48,11 +48,21 @@ void my_end_malloc_invariant(void);
 void *my_memalign(size_t blocksize, size_t bytes);
 void *my_memset(void *s, int c, u32 n);
 char *my_strncpy(char *dest, const char *src, u32 n);
-u32 my_fwrite_buffered(const void* buffer, u32 size, u32 count, FILE* file);
-bool my_fclose_buffered(FILE* file);
 bool my_file_exists(const char *name);
-s32 my_clamp(s32 val, s32 min, s32 max);
+
+inline s32 my_clamp(s32 val, s32 min, s32 max)
+{
+	if(val < min)
+		return min;
+	if(val > max)
+		return max;
+	return val;
+}
 
 u32 my_get_free_mem(void);
+
+u32 my_getFreeDiskSpace(void); // Gets free disk space in bytes
+u32 my_getUsedRam(void);
+u32 my_getFileSize(const char *filename);
 
 #endif

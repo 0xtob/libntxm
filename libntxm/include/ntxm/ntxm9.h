@@ -44,7 +44,7 @@ class NTXM9
 		
 		// Load the specified xm file from the file system using libfat
 		// Returns 0 on success, else an error code
-		u16 load(char *filename);
+		u16 load(const char *filename);
 		
 		// Returns a pointer to a string describing the error corresponding
 		// to the given error code.

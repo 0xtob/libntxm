@@ -39,7 +39,7 @@
 
 #include "ntxm/instrument.h"
 #include "ntxm/ntxmtools.h"
-#include "ntxm/command.h"
+#include "ntxm/fifocommand.h"
 
 #ifdef ARM9
 
@@ -65,7 +65,7 @@ Instrument::Instrument(const char *_name, Sample *_sample, u8 _volume)
 	for(u16 i=0; i<MAX_INST_NAME_LENGTH+1; ++i) name[i] = '\0';
 	my_strncpy(name, _name, MAX_INST_NAME_LENGTH);
 	
-	samples = (Sample**)malloc(sizeof(Sample*)*1);
+	samples = (Sample**)calloc(1, sizeof(Sample*)*1);
 	samples[0] = _sample;
 	n_samples = 1;
 	
@@ -149,7 +149,7 @@ void Instrument::play(u8 _note, u8 _volume, u8 _channel /* effects here */)
 	
 	switch(type) {
 		case INST_SAMPLE:
-			if(n_samples > 0)
+			if( (n_samples > 0) && (samples[note_samples[_note]] != 0) )
 				samples[note_samples[_note]]->play(_note, play_volume, _channel);
 			break;
 	}

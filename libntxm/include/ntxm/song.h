@@ -160,8 +160,13 @@ class Song {
 		Cell **getPattern(u8 idx);
 		u8 getChannels(void);
 		u16 getPatternLength(u8 idx);
+		
+		// Get milliseconds per row. Returns a 16.16 fixed point value
 		u32 getMsPerRow(void);
+		
+		// Get milliseconds per tick. Returns a 16.16 fixed point value
 		u32 getMsPerTick(void);
+		
 		Instrument *getInstrument(u8 instidx);
 		u8 getInstruments(void);
 		

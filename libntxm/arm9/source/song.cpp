@@ -39,7 +39,7 @@
 
 #include "ntxm/song.h"
 #include "ntxm/ntxmtools.h"
-#include "ntxm/command.h"
+#include "ntxm/fifocommand.h"
 
 /*
 A word on pattern memory management:
@@ -64,7 +64,7 @@ Song::Song(u8 _speed, u8 _bpm, u8 _channels)
 	patternlengths = (u16*)malloc(sizeof(u16)*MAX_PATTERNS);
 	internal_patternlengths = (u16*)malloc(sizeof(u16)*MAX_PATTERNS);
 	pattern_order_table = (u8*)malloc(sizeof(u8)*MAX_POT_LENGTH);
-	instruments = (Instrument**)malloc(sizeof(Instrument*)*MAX_INSTRUMENTS);
+	instruments = (Instrument**)calloc(1, sizeof(Instrument*)*MAX_INSTRUMENTS);
 	name = (char*)malloc(MAX_SONG_NAME_LENGTH+1);
 	my_memset(name, 0, MAX_SONG_NAME_LENGTH+1);
 	my_strncpy(name, "unnamed", MAX_SONG_NAME_LENGTH);
@@ -138,12 +138,14 @@ u16 Song::getPatternLength(u8 idx)
 
 // How many milliseconds per row
 u32 Song::getMsPerRow(void) {
-	return speed*5*1000/2/bpm; // Formula from Fasttracker II
+	// Formula from Fasttracker II: speed*5*1000/2/bpm
+	return (unsigned long)( ( ( ((unsigned long long)(speed) << 16) * ((unsigned long long)(2500) << 16)) ) / (bpm<<16) );
 }
 
 // How many milliseconds per tick (1 tick = time for 1 row / speed)
 u32 Song::getMsPerTick(void) {
-	return 5*1000/2/bpm; // Formula from Fasttracker II
+	// Formula from Fasttracker II: 5*1000/2/bpm
+	return (unsigned long)( (((unsigned long long)(2500)) << 32) / (bpm<<16) );
 }
 
 Instrument *Song::getInstrument(u8 instidx) {
@@ -166,6 +168,7 @@ u8 Song::getInstruments(void)
 
 void Song::setInstrument(u8 idx, Instrument *instrument) {
 	instruments[idx] = instrument;
+	DC_FlushAll();
 }
 
 // POT functions
@@ -173,6 +176,7 @@ void Song::potAdd(u8 ptn)
 {
 	pattern_order_table[potsize] = ptn;
 	potsize++;
+	DC_FlushAll();
 }
 
 void Song::potDel(u8 element)
@@ -182,7 +186,8 @@ void Song::potDel(u8 element)
 	}
 	if(potsize > 1) {
 		potsize--;
-	}	
+	}
+	DC_FlushAll();
 }
 
 void Song::potIns(u8 idx, u8 pattern)
@@ -194,6 +199,7 @@ void Song::potIns(u8 idx, u8 pattern)
 		pattern_order_table[idx] = pattern;
 		potsize++;
 	}
+	DC_FlushAll();
 }
 
 #endif
@@ -210,6 +216,7 @@ u8 Song::getPotEntry(u8 idx) {
 
 void Song::setPotEntry(u8 idx, u8 value) {
 	pattern_order_table[idx] = value;
+	DC_FlushAll();
 }
 
 void Song::addPattern(u16 length)
@@ -221,11 +228,9 @@ void Song::addPattern(u16 length)
 	
 	patterns[n_patterns-1] = (Cell**)malloc(sizeof(Cell*)*n_channels);
 	
-	u8 i,j;
+	u16 i,j;
 	for(i=0;i<n_channels;++i)
 	{
-		
-		
 		patterns[n_patterns-1][i] = (Cell*)malloc(sizeof(Cell)*patternlengths[n_patterns-1]);
 		
 		Cell *cell;
@@ -235,6 +240,7 @@ void Song::addPattern(u16 length)
 			clearCell(cell);
 		}
 	}
+	DC_FlushAll();
 }
 
 void Song::channelAdd(void) {
@@ -245,17 +251,18 @@ void Song::channelAdd(void) {
 	for(u8 pattern=0;pattern<n_patterns;++pattern) {
 		patterns[pattern] = (Cell**)realloc(patterns[pattern], sizeof(Cell*)*(n_channels+1));
 		patterns[pattern][n_channels] = (Cell*)malloc(sizeof(Cell)*internal_patternlengths[pattern]);
-		
+
 		// Clear
 		Cell *cell;
-		for(u8 j=0;j<internal_patternlengths[pattern];++j) {
+		for(u16 j=0;j<internal_patternlengths[pattern];++j) {
 			cell = &patterns[pattern][n_channels][j];
 			clearCell(cell);
 		}
 	}
-	
+
 	n_channels++;
 	
+	DC_FlushAll();
 }
 
 void Song::channelDel(void) {
@@ -270,6 +277,7 @@ void Song::channelDel(void) {
 	
 	n_channels--;
 	
+	DC_FlushAll();
 }
 
 #endif
@@ -306,6 +314,8 @@ void Song::resizePattern(u8 ptn, u16 newlength)
 		patternlengths[ptn] = newlength;
 		internal_patternlengths[ptn] = newlength;
 	}
+	
+	DC_FlushAll();
 }
 
 // The most important function
@@ -323,6 +333,7 @@ const char *Song::getName(void) {
 
 void Song::setRestartPosition(u8 _restart_position) {
 	restart_position = _restart_position;
+	DC_FlushAll();
 }
 
 #endif
@@ -341,10 +352,16 @@ u8 Song::getBPM(void) {
 
 void Song::setTempo(u8 _tempo) {
 	speed = _tempo;
+#ifdef ARM9
+	DC_FlushAll();
+#endif
 }
 
 void Song::setBpm(u8 _bpm) {
 	bpm = _bpm;
+#ifdef ARM9
+	DC_FlushAll();
+#endif
 }
 
 #ifdef ARM9
@@ -366,6 +383,7 @@ void Song::zapPatterns(void) {
 	addPattern();
 	
 	restart_position = 0;
+	DC_FlushAll();
 }
 
 void Song::zapInstruments(void)
@@ -377,6 +395,7 @@ void Song::zapInstruments(void)
 		instruments[i] = NULL;
 	}
 	
+	DC_FlushAll();
 }
 
 void Song::clearCell(Cell *cell)
@@ -396,6 +415,7 @@ void Song::setChannelMute(u8 chn, bool muted)
 		return;
 	
 	channels_muted[chn] = muted;
+	DC_FlushAll();
 }
 
 #endif
@@ -439,7 +459,6 @@ void Song::killInstruments(void) {
 	
 	free(instruments);
 	instruments = NULL;
-	
 }
 
 #endif
