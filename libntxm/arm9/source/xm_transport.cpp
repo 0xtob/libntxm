@@ -66,8 +66,6 @@ u16 XMTransport::load(const char *filename, Song **_song)
 	//
 	// Init
 	//
-	fatInitDefault();
-
 	u32 filesize = my_getFileSize(filename);
 
 	// Check if the song fits into RAM
@@ -101,6 +99,7 @@ u16 XMTransport::load(const char *filename, Song **_song)
 	FILE *xmfile = fopen(filename, "r");
 	if((s32)xmfile == -1)
 		return XM_TRANSPORT_ERROR_FOPENFAIL;
+	setvbuf(xmfile, NULL, _IOFBF, 4096);
 
 	//
 	// Read header

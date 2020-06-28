@@ -13,7 +13,6 @@
 
 extern "C" {
   #include "xtoa.h"
-  #include "ntxm/tobmic.h"
 }
 
 #include "ntxm/player.h"
@@ -33,23 +32,23 @@ static void RecvCommandStopSample(StopSampleSoundCommand* ss) {
 
 static void RecvCommandMicOn(void)
 {
-    tob_MIC_On();
+    micOn();
 }
 
 static void RecvCommandMicOff(void)
 {
-    tob_MIC_Off();
+    micOff();
 }
 
 static void RecvCommandStartRecording(StartRecordingCommand* sr)
 {
     ntxm_recording = true;
-    tob_StartRecording(sr->buffer, sr->length);
+    micStartRecording((u8*) sr->buffer, sr->length, 16384, 1, false, NULL);
 }
 
 static void RecvCommandStopRecording()
 {
-    int ret = tob_StopRecording();
+    int ret = micStopRecording() * 2; // buffer size in bytes
     fifoSendValue32(FIFO_NTXM, (u32)ret);
     ntxm_recording = false;
 }

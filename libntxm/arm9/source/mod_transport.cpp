@@ -64,6 +64,8 @@ u16 ModTransport::load(const char *filename, Song **_song)
 	
 	if((s32)modfile == -1)
 		return MOD_TRANSPORT_ERROR_FOPENFAIL;
+
+	setvbuf(modfile, NULL, _IOFBF, 4096);
 	
 	// Check if the song fits into RAM
 	struct stat fstats;
