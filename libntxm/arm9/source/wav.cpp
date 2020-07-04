@@ -67,7 +67,7 @@ bool Wav::load(const char *filename)
 
 	fileh = fopen(filename, "r");
 
-	if((s32)fileh == -1)
+	if(!fileh)
 		return false;
 
 	// Check if the file is not too big
@@ -100,6 +100,7 @@ bool Wav::load(const char *filename)
 
 	if(strcmp(buf,"RIFF")!=0) {
 		fclose(fileh);
+		free(buf);
 		return false;
 	}
 
@@ -110,6 +111,7 @@ bool Wav::load(const char *filename)
 	fread(buf, 1, 4, fileh);
 	if(strcmp(buf,"WAVE")!=0) {
 		fclose(fileh);
+		free(buf);
 		return false;
 	}
 
@@ -117,6 +119,7 @@ bool Wav::load(const char *filename)
 	fread(buf, 1, 4, fileh);
 	if(strcmp(buf,"fmt ")!=0) {
 		fclose(fileh);
+		free(buf);
 		return false;
 	}
 
@@ -133,6 +136,7 @@ bool Wav::load(const char *filename)
 		compression_ = CMP_ADPCM;
 	}*/ else {
 		fclose(fileh);
+		free(buf);
 		return false;
 	}
 
@@ -141,6 +145,7 @@ bool Wav::load(const char *filename)
 
 	if(n_channels > 2) {
 		fclose(fileh);
+		free(buf);
 		return false;
 	} else {
 		n_channels_ = n_channels;
@@ -162,9 +167,10 @@ bool Wav::load(const char *filename)
 	if((bit_per_sample==8)||(bit_per_sample==16)) {
 		bit_per_sample_ = bit_per_sample;
 	} else {
-        fclose(fileh);
-        return false;
-    }
+		fclose(fileh);
+		free(buf);
+		return false;
+	}
 
 	// Skip extra bytes
 	fseek(fileh, fmt_chunk_size - 16, SEEK_CUR);
@@ -181,6 +187,7 @@ bool Wav::load(const char *filename)
 
 	if(feof(fileh)) {
 		fclose(fileh);
+		free(buf);
 		return false;
 	}
 
