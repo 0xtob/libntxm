@@ -251,7 +251,7 @@ u16 XMTransport::load(const char *filename, Song **_song)
 
 			if(bytes_read != patterndata_size) {
 				fclose(xmfile);
-				iprintf("pattern read error.\nread:%u (should be %u)\n", bytes_read, patterndata_size);
+				iprintf("pattern read error.\nread:%lu (should be %u)\n", bytes_read, patterndata_size);
 				delete song;
 				return XM_TRANSPORT_ERROR_PATTERN_READ;
 			}
@@ -510,17 +510,17 @@ u16 XMTransport::load(const char *filename, Song **_song)
 				// Sample length
 				u32 sample_length;
 				sample_length = *(u32*)(sample_headers+40*sample_id + 0);
-				iprintf("sample length: %u\n", sample_length);
+				iprintf("sample length: %lu\n", sample_length);
 
 				// Sample loop start
 				u32 sample_loop_start;
 				sample_loop_start = *(u32*)(sample_headers+40*sample_id + 4);
-				iprintf("sample loop start: %u\n", sample_loop_start);
+				iprintf("sample loop start: %lu\n", sample_loop_start);
 
 				// Sample loop length
 				u32 sample_loop_length;
 				sample_loop_length = *(u32*)(sample_headers+40*sample_id + 8);
-				iprintf("sample loop length: %u\n", sample_loop_length);
+				iprintf("sample loop length: %lu\n", sample_loop_length);
 
 				// Volume (0-64)
 				u8 sample_volume;
@@ -563,12 +563,12 @@ u16 XMTransport::load(const char *filename, Song **_song)
 				//iprintf("rel note: %d\n", sample_rel_note);
 
 				// Sample name
-				char sample_name[23];
-				memset(sample_name, 23, 0);
+				char sample_name[22 + 1];
+				memset(sample_name, 0, sizeof(sample_name));
 				memcpy(sample_name, sample_headers+40*sample_id + 18, 22);
 
 				// Cut off trailing spaces
-				u8 i=21;
+				u8 i = sizeof(sample_name) - 2;
 				while(sample_name[i] == ' ')
 					--i;
 				++i;
@@ -595,7 +595,7 @@ u16 XMTransport::load(const char *filename, Song **_song)
 				}
 
 				// Delta-decode
-				iprintf("delta deocde\n");
+				iprintf("delta decode\n");
 				if(sample_is_16_bit) {
 					s16 last = 0;
 					s16 *smp = (s16*)sample_data;
@@ -674,7 +674,7 @@ u16 XMTransport::save(const char *filename, Song *song)
 		return XM_TRANSPORT_DISK_FULL;
 	}
 
-	iprintf("free disk space: %d kb\n", my_getFreeDiskSpace() / 1024);
+	iprintf("free disk space: %ld kb\n", my_getFreeDiskSpace() / 1024);
 
 	my_start_malloc_invariant(); // security
 

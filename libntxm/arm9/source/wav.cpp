@@ -278,7 +278,7 @@ bool Wav::save(const char *filename)
 
 	fwrite(&data_chunk_size, 4, 1, fileh);
 
-	printf("rate: %u\ndata: %u\n", sampling_rate_, data_chunk_size);
+	iprintf("rate: %u\ndata: %lu\n", sampling_rate_, data_chunk_size);
 
 	if(bit_per_sample == 8)
 	{

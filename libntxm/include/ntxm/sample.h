@@ -133,7 +133,7 @@ class Sample
 		u32 loop_length;	// In bytes, not in samples!
 		u8 volume;
 		u8 panning;
-		char name[SAMPLE_NAME_LENGTH];
+		char name[SAMPLE_NAME_LENGTH + 1];
 
 		// These are calculated in the constructor
 		u32 size;
