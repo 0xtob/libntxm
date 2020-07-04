@@ -732,13 +732,18 @@ void Player::handleFade(u32 passed_time)
 
 			// Calculate volume from initial volume, target volume and remaining fade time
 			// Can be done way quicker using fixed point
+			/*
 			float fslope = (float)(state.channel_volume[channel] - state.channel_fade_target_volume[channel])
 					/ (float)FADE_OUT_MS;
 
 			float fvolume = (float)state.channel_fade_target_volume[channel]
 					+ fslope * (float)(state.channel_fade_ms[channel]);
+			*/
+			int fvol_diff = state.channel_volume[channel] - state.channel_fade_target_volume[channel];
+			int fslope = (fvol_diff << 12) / FADE_OUT_MS; // 20.12
+			int fvolume = (state.channel_fade_target_volume[channel] << 12) + (fslope * state.channel_fade_ms[channel]); // 20.12
 
-			u8 volume = (u8)fvolume;
+			u8 volume = (u8) (fvolume >> 12);
 
 			state.channel_fade_vol[channel] = volume;
 
