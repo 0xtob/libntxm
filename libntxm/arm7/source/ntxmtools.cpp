@@ -40,12 +40,8 @@
 
 s32 unfreed_malloc_calls = 0;
 
-#define WRITEBUFFER_SIZE	512
-
 #ifdef ARM9
 
-u8 writebuffer[WRITEBUFFER_SIZE] = {0};
-u32 writebuffer_pos = 0;
 u32 remaining_bytes = 0;
 
 void *my_malloc(size_t size)
@@ -133,54 +129,6 @@ bool my_file_exists(const char *filename)
 }
 
 #endif
-
-// Borrowed from Infantile Paralyser
-bool my_testmalloc(int size)
-{
-	if(size<=0) return(false);
-	
-	void *ptr;
-	u32 adr;
-	
-	ptr=malloc(size+(64*1024)); // 64kb
-	
-	if(ptr==NULL) return(false);
-	
-	adr=(u32)ptr;
-	free(ptr);
-	
-	if((adr&3)!=0){ // 4byte
-		return(false);
-	}
-	
-	if((adr+size)<0x02000000){
-		return(false);
-	}
-	
-	if((0x02000000+(4*1024*1024))<=adr){
-		return(false);
-	}
-	
-	return(true);
-}
-
-#define PrintFreeMem_Seg (10240)
-
-// Get the size of the biggest allocatable memory chunk
-// Borrowed from Infantile Paralyser
-//TODO: This is NOT a clean way to get the free memory! Fix it!
-u32 my_get_free_mem(void)
-{
-	s32 i;
-	u32 FreeMemSize=0;
-	
-	for(i=1*PrintFreeMem_Seg;i<16384*1024;i+=PrintFreeMem_Seg){
-		if(my_testmalloc(i)==false) break;
-		FreeMemSize=i;
-	}
-	
-	return FreeMemSize;
-}
 
 u32 my_getUsedRam(void)
 {

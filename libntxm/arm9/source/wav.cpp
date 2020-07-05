@@ -70,37 +70,13 @@ bool Wav::load(const char *filename)
 	if(!fileh)
 		return false;
 
-	// Check if the file is not too big
-	fseek(fileh, 0, SEEK_END);
-	u32 filesize = ftell(fileh);
-
-	u32 free_ram = my_get_free_mem();
-
-	if( filesize > free_ram )
-	{
-		fclose(fileh);
-		iprintf("file too big for ram\n");
-		return false;
-	}
-
-	if(filesize == 0)
-	{
-		fclose(fileh);
-		iprintf("0-byte file!\n");
-		return false;
-	}
-
-	fseek(fileh, 0, SEEK_SET);
-
-	char *buf = (char*)malloc(5);
-	memset(buf,0,5);
+	char buf[5] = {0};
 
 	// RIFF header
 	fread(buf, 1, 4, fileh);
 
 	if(strcmp(buf,"RIFF")!=0) {
 		fclose(fileh);
-		free(buf);
 		return false;
 	}
 
@@ -111,7 +87,6 @@ bool Wav::load(const char *filename)
 	fread(buf, 1, 4, fileh);
 	if(strcmp(buf,"WAVE")!=0) {
 		fclose(fileh);
-		free(buf);
 		return false;
 	}
 
@@ -119,7 +94,6 @@ bool Wav::load(const char *filename)
 	fread(buf, 1, 4, fileh);
 	if(strcmp(buf,"fmt ")!=0) {
 		fclose(fileh);
-		free(buf);
 		return false;
 	}
 
@@ -136,7 +110,6 @@ bool Wav::load(const char *filename)
 		compression_ = CMP_ADPCM;
 	}*/ else {
 		fclose(fileh);
-		free(buf);
 		return false;
 	}
 
@@ -145,7 +118,6 @@ bool Wav::load(const char *filename)
 
 	if(n_channels > 2) {
 		fclose(fileh);
-		free(buf);
 		return false;
 	} else {
 		n_channels_ = n_channels;
@@ -168,7 +140,6 @@ bool Wav::load(const char *filename)
 		bit_per_sample_ = bit_per_sample;
 	} else {
 		fclose(fileh);
-		free(buf);
 		return false;
 	}
 
@@ -187,7 +158,6 @@ bool Wav::load(const char *filename)
 
 	if(feof(fileh)) {
 		fclose(fileh);
-		free(buf);
 		return false;
 	}
 
@@ -203,16 +173,14 @@ bool Wav::load(const char *filename)
 	}
 
 	audio_data_ = (u8*)malloc(data_chunk_size);
-	memset(audio_data_, 0, data_chunk_size);
-
 	if(audio_data_ == 0) {
 		iprintf("Could not alloc mem for wav.\n");
-		free(buf);
 		fclose(fileh);
 		return false;
 	}
 
 	// Read the data
+	memset(audio_data_, 0, data_chunk_size);
 	fread(audio_data_, data_chunk_size, 1, fileh);
 
 	// Convert 8 bit samples from unsigned to signed
@@ -224,8 +192,6 @@ bool Wav::load(const char *filename)
 	}
 
 	// Finish up
-	free(buf);
-
 	fclose(fileh);
 
 #endif

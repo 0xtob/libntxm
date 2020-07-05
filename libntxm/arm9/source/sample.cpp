@@ -824,8 +824,8 @@ u16 Sample::findClosestFreq(u32 freq)
 
 bool Sample::convertStereoToMono(void)
 {
-	// Check if there is enough RAM for this
-	if(my_get_free_mem() < size)
+	void *_tmpbuf = malloc(size);
+	if(!_tmpbuf)
 	{
 		printf("not enough ram for stereo 2 mono conversion\n");
 		return false;
@@ -834,7 +834,7 @@ bool Sample::convertStereoToMono(void)
 	if(is_16_bit == true)
 	{
 		// Make a buffer for the converted sample
-		s16 *tmpbuf = (s16*)malloc(size);
+		s16 *tmpbuf = (s16*)_tmpbuf;
 		s16 *src = (s16*)sound_data;
 
 		// Convert the sample down
@@ -853,7 +853,7 @@ bool Sample::convertStereoToMono(void)
 	else
 	{
 		// Make a buffer for the converted sample
-		s8 *tmpbuf = (s8*)malloc(size);
+		s8 *tmpbuf = (s8*)_tmpbuf;
 		s8 *src = (s8*)sound_data;
 
 		// Convert the sample down

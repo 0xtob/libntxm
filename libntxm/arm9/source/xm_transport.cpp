@@ -89,13 +89,6 @@ u16 XMTransport::load(const char *filename, Song **_song)
 		return XM_TRANSPORT_FILE_ZERO_BYTE;
 	}
 
-	u32 ram_free = my_get_free_mem();
-	if(filesize > ram_free)
-	{
-		iprintf("file too big for ram\n");
-		return XM_TRANSPORT_FILE_TOO_BIG_FOR_RAM;
-	}
-
 	FILE *xmfile = fopen(filename, "r");
 	if((s32)xmfile == -1)
 		return XM_TRANSPORT_ERROR_FOPENFAIL;
@@ -180,6 +173,13 @@ u16 XMTransport::load(const char *filename, Song **_song)
 	iprintf("new song %u %u %u\n",tempo, bpm, n_channels );
 	// Construct the song with the current info
 	Song *song = new Song(tempo, bpm, n_channels);
+	if(song==NULL)
+	{
+		fclose(xmfile);
+		iprintf("memfull on line %d\n", __LINE__);
+		delete song;
+		return XM_TRANSPORT_ERROR_MEMFULL;
+	}
 
 	song->setName(songname);
 
@@ -243,13 +243,20 @@ u16 XMTransport::load(const char *filename, Song **_song)
 
 		if(patterndata_size > 0) { // Read the pattern
 
-			u8 *ptn_data = (u8*)my_memalign(2, patterndata_size);
+			u8 *ptn_data = (u8*)memalign(2, patterndata_size);
+			if (ptn_data == NULL) {
+				fclose(xmfile);
+				iprintf("memfull on line %d\n", __LINE__);
+				delete song;
+				return XM_TRANSPORT_ERROR_MEMFULL;
+			}
 
 			u32 bytes_read;
 
 			bytes_read = fread(ptn_data, 1, patterndata_size, xmfile);
 
 			if(bytes_read != patterndata_size) {
+				free(ptn_data);
 				fclose(xmfile);
 				iprintf("pattern read error.\nread:%lu (should be %u)\n", bytes_read, patterndata_size);
 				delete song;
@@ -432,7 +439,13 @@ u16 XMTransport::load(const char *filename, Song **_song)
 
 	for(u8 inst=0; inst<n_inst; ++inst)
 	{
-		struct InstInfo *instinfo = (struct InstInfo*)calloc(sizeof(struct InstInfo), 1);
+		struct InstInfo *instinfo = (struct InstInfo*)calloc(1, sizeof(struct InstInfo));
+		if (instinfo == NULL) {
+			fclose(xmfile);
+			iprintf("memfull on line %d\n", __LINE__);
+			delete song;
+			return XM_TRANSPORT_ERROR_MEMFULL;
+		}
 
 		// Read fields up to number of samples
 
@@ -444,6 +457,7 @@ u16 XMTransport::load(const char *filename, Song **_song)
 		Instrument *instrument = new Instrument(instinfo->name);
 		if(instrument == 0)
 		{
+			free(instinfo);
 			fclose(xmfile);
 			iprintf("memfull on line %d\n", __LINE__);
 			delete song;
@@ -502,7 +516,14 @@ u16 XMTransport::load(const char *filename, Song **_song)
 			// Load the sample(s)
 
 			// Headers
-			u8 *sample_headers = (u8*)my_memalign(2, instinfo->n_samples*40);
+			u8 *sample_headers = (u8*)memalign(2, instinfo->n_samples*40);
+			if (sample_headers == NULL) {
+				free(instinfo);
+				fclose(xmfile);
+				iprintf("memfull on line %d\n", __LINE__);
+				delete song;
+				return XM_TRANSPORT_ERROR_MEMFULL;
+			}
 			fread(sample_headers, 40, instinfo->n_samples, xmfile);
 
 			for(u8 sample_id=0; sample_id < instinfo->n_samples; sample_id++)
@@ -581,10 +602,12 @@ u16 XMTransport::load(const char *filename, Song **_song)
 				void *sample_data = 0;
 				if(sample_length > 0)
 				{
-					sample_data = my_memalign(2, sample_length); //mymemalign(2, sample_length);
+					sample_data = memalign(2, sample_length);
 
 					if(sample_data==NULL)
 					{
+						free(sample_headers);
+						free(instinfo);
 						fclose(xmfile);
 						iprintf("memfull on line %d\n", __LINE__);
 						delete song;
@@ -623,6 +646,16 @@ u16 XMTransport::load(const char *filename, Song **_song)
 					n_samples = sample_length;
 				}
 				Sample *sample = new Sample(sample_data, n_samples, 8363, sample_is_16_bit);
+				if(sample==NULL)
+				{
+					free(sample_data);
+					free(sample_headers);
+					free(instinfo);
+					fclose(xmfile);
+					iprintf("memfull on line %d\n", __LINE__);
+					delete song;
+					return XM_TRANSPORT_ERROR_MEMFULL;
+				}
 
 				sample->setVolume(sample_volume);
 				sample->setRelNote(sample_rel_note);
@@ -942,8 +975,13 @@ u16 XMTransport::save(const char *filename, Song *song)
 		// We also have to save empty instruments
 		bool empty_inst = false;
 		if(instrument==NULL) {
-			empty_inst = true;
 			instrument = new Instrument("");
+			if (instrument == NULL) {
+				fclose(xmfile);
+				iprintf("memfull on line %d\n", __LINE__);
+				return XM_TRANSPORT_ERROR_MEMFULL;
+			}
+			empty_inst = true;
 		}
 
 		// Instrument size (always 0x107)
@@ -969,7 +1007,13 @@ u16 XMTransport::save(const char *filename, Song *song)
 
 			// Second part of inst header:
 
-			InstInfo *instinfo = (InstInfo*)calloc(1, sizeof(InstInfo));
+			struct InstInfo *instinfo = (InstInfo*)calloc(1, sizeof(InstInfo));
+			if (instinfo == NULL) {
+				if (empty_inst) delete instrument;
+				fclose(xmfile);
+				iprintf("memfull on line %d\n", __LINE__);
+				return XM_TRANSPORT_ERROR_MEMFULL;
+			}
 
 			// Sample header size (always 0x28)
 			instinfo->sample_header_size = 0x28;
@@ -1062,6 +1106,12 @@ u16 XMTransport::save(const char *filename, Song *song)
 				if(sample == NULL)
 				{
 					sample = new Sample(NULL, 0);
+					if (sample == NULL) {
+						if (empty_inst) delete instrument;
+						fclose(xmfile);
+						iprintf("memfull on line %d\n", __LINE__);
+						return XM_TRANSPORT_ERROR_MEMFULL;
+					}
 					empty_sample = true;
 				}
 
@@ -1128,8 +1178,14 @@ u16 XMTransport::save(const char *filename, Song *song)
 				bool empty_sample = false;
 				if(sample == NULL)
 				{
-					empty_sample = true;
 					sample = new Sample(NULL, 0);
+					if (sample == NULL) {
+						if (empty_inst) delete instrument;
+						fclose(xmfile);
+						iprintf("memfull on line %d\n", __LINE__);
+						return XM_TRANSPORT_ERROR_MEMFULL;
+					}
+					empty_sample = true;
 				}
 
 				if(sample->is16bit())
@@ -1203,9 +1259,16 @@ u16 XMTransport::save(const char *filename, Song *song)
 		{
 			// fill up the instrument header with 0es
 			u8 *zeroes = (u8*)my_memalign(2, inst_size - 29);
-			memset(zeroes, 0, inst_size - 29);
-			fwrite(zeroes, inst_size - 29, 1, xmfile);
-			my_free(zeroes);
+			if (zeroes != NULL) {
+				memset(zeroes, 0, inst_size - 29);
+				fwrite(zeroes, inst_size - 29, 1, xmfile);
+				my_free(zeroes);
+			} else {
+				iprintf("saving with slow uncached fallback\n");
+				for (u32 i=0; i<inst_size - 29; ++i)
+					fputc(0, xmfile);
+				iprintf("done\n");
+			}
 		}
 
 		if(empty_inst == true) {
