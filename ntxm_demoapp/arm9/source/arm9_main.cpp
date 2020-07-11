@@ -8,7 +8,7 @@ NTXM9 *ntxm9 = 0;
 
 int main(void)
 {
-	powerON(POWER_ALL);
+	powerOn(POWER_ALL);
 	irqInit();
 	
 	irqEnable(IRQ_VBLANK);
@@ -17,14 +17,11 @@ int main(void)
 	videoSetModeSub(MODE_0_2D | DISPLAY_BG0_ACTIVE);
 	vramSetBankC(VRAM_C_SUB_BG);
 	
-	SUB_BG0_CR = BG_MAP_BASE(31);
-	
-	BG_PALETTE_SUB[255] = RGB15(31,31,31);
-	
-	consoleInitDefault((u16*)SCREEN_BASE_BLOCK_SUB(31), (u16*)CHAR_BASE_BLOCK_SUB(0), 16);
+	consoleDemoInit();
 	
 	iprintf("Demo XM player!\n\nLoading song...\n");
 	
+	fifoInit();
 	ntxm9 = new NTXM9();
 	u16 err = ntxm9->load("test.xm");
 	

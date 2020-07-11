@@ -32,7 +32,7 @@
 
 #include "ntxm/ntxm9.h"
 #include "ntxm/demokit.h"
-#include "ntxm/command.h"
+#include "ntxm/fifocommand.h"
 
 NTXM9::NTXM9()
 	:xm_transport(0), song(0)
@@ -49,7 +49,7 @@ NTXM9::~NTXM9()
 		delete song;
 }
 
-u16 NTXM9::load(char *filename)
+u16 NTXM9::load(const char *filename)
 {
 	u16 err = xm_transport->load(filename, &song);
 	CommandSetSong(song);

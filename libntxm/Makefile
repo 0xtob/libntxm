@@ -21,6 +21,8 @@ export INCLUDE		:= 	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
 				$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
 				-I$(CURDIR)/$(BUILD)
 
+.PHONY: arm9/lib/$(TARGET)9.a arm7/lib/$(TARGET)7.a
+
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
@@ -28,12 +30,12 @@ all: arm9/lib/$(TARGET)9.a arm7/lib/$(TARGET)7.a
 	@cp arm9/lib/$(TARGET)9.a arm7/lib/$(TARGET)7.a lib
 
 arm9/lib/$(TARGET)9.a:
-	make -C arm9
+	$(MAKE) -C arm9
 
 arm7/lib/$(TARGET)7.a:
-	make -C arm7
+	$(MAKE) -C arm7
 
-install: all
+install: all 
 	cp lib/*.a $(DEVKITPRO)/libnds/lib
 	cp -R include/ntxm $(DEVKITPRO)/libnds/include
 

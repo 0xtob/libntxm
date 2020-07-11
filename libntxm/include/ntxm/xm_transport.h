@@ -44,6 +44,7 @@
 #define XM_TRANSPORT_NULL_INSTRUMENT			7 // Deprecated
 #define XM_TRANSPORT_PATTERN_TOO_LONG			8
 #define XM_TRANSPORT_FILE_ZERO_BYTE				9
+#define XM_TRANSPORT_DISK_FULL					10
 
 // This class implements loading from and saving to the XM file format
 // introduced by Fasttracker II. Man, those were the days!
@@ -82,7 +83,7 @@ class XMTransport: public FormatTransport {
 		// returns 0 on success, an error code else
 		u16 load(const char *filename, Song **_song);
 		
-		// Saves a song to a file
+		// Saves a song to a file, returns 0 on success, an error code otherwise
 		u16 save(const char *filename, Song *song);
 		
 		const char *getError(u16 error_id);
